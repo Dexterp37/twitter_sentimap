@@ -29,14 +29,23 @@ class TwitterStreamListener(tweepy.StreamListener):
 
         self._data_sink.on_data_available(tweet)
 
-    def on_error(self, status):
-        pass
+    def on_error(self, status_code):
+        # Returning False in on_data disconnects the stream. This
+        # is needed when the Twitter API returns 420: it means that
+        # we're exceeding the number of attempts.
+        logger.error("An error was received from the Twitter API.", extra_data={status_code})
+        if status_code == 420:
+            return False
 
 
 class TwitterSource:
-    def __init__(self):
-        self._auth = None
+    def __init__(self, data_callback=None):
+        self._auth = tweepy.OAuthHandler(config.TWITTER_CONSUMER_KEY,
+                                         config.TWITTER_CONSUMER_SECRET)
+        self._auth.set_access_token(config.TWITTER_ACCESS_TOKEN,
+                                    config.TWITTER_ACCESS_SECRET)
         self._stream = None
+        self._callback = data_callback
 
     def start(self, languages, keywords):
         if self._stream:
@@ -53,5 +62,9 @@ class TwitterSource:
 
         self._stream.disconnect()
 
+    def set_data_available_callback(self, data_callback):
+        self._callback = data_callback
+
     def on_data_available(self, json_data):
-        print("Received data: {}\n".format(json.dumps(json_data)))
+        if self._callback:
+            self._callback(json_data)
