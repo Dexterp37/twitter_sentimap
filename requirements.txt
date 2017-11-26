@@ -1,3 +1,8 @@
 argparse
 flake8
+gensim
+geocoder
+nltk
+keras
+tensorflow
 tweepy

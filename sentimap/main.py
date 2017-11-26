@@ -2,6 +2,7 @@ import argparse
 import logging
 import sys
 from twitter_source import TwitterSource
+from tweet_to_packet import TweetToPacket
 from replay_source import ReplaySource
 from source_recorder import SourceRecorder
 
@@ -30,33 +31,37 @@ def parse_args():
 
     return parser.parse_args()
 
+def send_data(tweet):
+    import json
+    logger.debug("Clean record {}".format(json.dumps(tweet)))
 
 def execute_pipeline(args):
     # Set the desired log level.
     logging.basicConfig(level=args.log_level.upper())
     logger.info("Starting")
 
-    source = None
     # Pick the right data source depending on the provided arguments.
+    source = None
     if args.replay:
         source = ReplaySource(args.datadir,
                               chunk_size=1,
                               chunk_delay=2)
-        source.set_data_available_callback(lambda d: logger.info("Replayed record"))
     else:
         source = TwitterSource()
 
+    # Set-up a sink that will deal with our Twitter data.
+    if not args.replay and args.record:
         # Are we plannng to record the Twitter stream?
-        if args.record:
-            recorder = SourceRecorder(args.datadir)
-            source.set_data_available_callback(recorder.on_data_available)
+        recorder = SourceRecorder(args.datadir)
+        source.set_data_available_callback(recorder.on_data_available)
 
-    # Start fetching tweets.
+    # Clean the raw tweets.
+    cleaner = TweetToPacket(send_data)
+    source.set_data_available_callback(cleaner.process_input)
+
+    # Run the pipeline and bail out when the user presses ENTER.
     source.start(['en'], ['trump'])
-
-    # Wait for enter to quit.
-    input("--> Press enter to quit.")
-
+    input("--> Press enter to quit.\n")
     source.stop()
 
 
