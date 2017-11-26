@@ -1,5 +1,15 @@
+import config
 import geocoder
+import keras.backend as K
 import logging
+import numpy as np
+import tensorflow as tf
+from gensim.models.word2vec import Word2Vec
+from keras.models import Sequential
+from keras.layers.core import Dense, Dropout, Flatten
+from keras.layers.convolutional import Conv1D
+from nltk.stem.lancaster import LancasterStemmer
+from nltk.tokenize import RegexpTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -11,17 +21,32 @@ class TweetToPacket:
     """
     def __init__(self, data_callback=None):
         self._callback = data_callback
+        # The Word2Vec sentiment analysis of Twitter data was
+        # taken from:
+        # https://github.com/giuseppebonaccorso/twitter_sentiment_analysis_word2vec_convnet
+        self._tokenizer = RegexpTokenizer('[a-zA-Z0-9@]+')
+        self._stemmer = LancasterStemmer()
+        # Load our pre-trained models.
+        self._w2v = self._load_word2vec_keyed_vectors()
+        self._model = self._load_keras_model()
+        # The below is needed due to how Keras handle async stuff. See
+        # https://github.com/fchollet/keras/issues/2397#issuecomment-254919212
+        self._model_graph = tf.get_default_graph()
 
     def process_input(self, data):
         if not data or len(data) != 1:
             logger.error("Empty or invalid data")
             return
 
-        # Clean and extract the data.
         raw_tweet = data[0]
+
+        # Clean and extract the data.
+        tokens, features = self._process_text(raw_tweet)
         cleaned = {
-            "location": self._get_geo_coords(raw_tweet),
+            #"location": self._get_geo_coords(raw_tweet),
             "text": raw_tweet.get("text"),
+            "text_tokens": tokens,
+            "sentiment": self._get_sentiment(features),
             "tweet_id": raw_tweet.get("id"),
             "user_id": raw_tweet.get("user", {}).get("id"),
             "screen_name": raw_tweet.get("user", {}).get("screen_name"),
@@ -36,6 +61,96 @@ class TweetToPacket:
     def on_data_available(self, data):
         if self._callback:
             self._callback(data)
+
+    def _load_word2vec_keyed_vectors(self):
+        word2vec = Word2Vec.load(config.WORD2VEC_MODEL_PATH)
+        # We only want to keep the KeyedVectors instance.
+        w2v_keyed_vectors = word2vec.wv
+        # Save some memory by dumping the rest of the model.
+        del word2vec
+        return w2v_keyed_vectors
+
+    def _load_keras_model(self, max_tweet_tokens=15, word2vec_vector_size=512):
+        # We didn't store the model structure in the file when saving our model.
+        # Let's redefine it here.
+        model = Sequential()
+
+        model.add(Conv1D(32, kernel_size=3, activation='elu', padding='same',
+                         input_shape=(max_tweet_tokens, word2vec_vector_size)))
+        model.add(Conv1D(32, kernel_size=3, activation='elu', padding='same'))
+        model.add(Conv1D(32, kernel_size=3, activation='elu', padding='same'))
+        model.add(Conv1D(32, kernel_size=3, activation='elu', padding='same'))
+        model.add(Dropout(0.25))
+
+        model.add(Conv1D(32, kernel_size=2, activation='elu', padding='same'))
+        model.add(Conv1D(32, kernel_size=2, activation='elu', padding='same'))
+        model.add(Conv1D(32, kernel_size=2, activation='elu', padding='same'))
+        model.add(Conv1D(32, kernel_size=2, activation='elu', padding='same'))
+        model.add(Dropout(0.25))
+
+        model.add(Flatten())
+
+        model.add(Dense(256, activation='tanh'))
+        model.add(Dense(256, activation='tanh'))
+        model.add(Dropout(0.5))
+
+        model.add(Dense(2, activation='softmax'))
+
+        # Load the weights.
+        model.load_weights(config.KERAS_MODEL_PATH)
+
+        return model
+
+    def _process_text(self, data, max_tweet_tokens=15, word2vec_vector_size=512):
+        text = data.get("text")
+        if not text:
+            logger.error("This Tweet contains no text.")
+            return None
+
+        # Strip whitespaces and make the tweet lowercase.
+        tokens = [self._stemmer.stem(t)
+                  for t in self._tokenizer.tokenize(text.strip().lower())
+                  if not t.startswith('@')]
+
+        # TODO: Remove stop words from here and from the model!
+
+        # Compute the feature vector for this Tweet. For each token and up to the
+        # maximum number of tokens allowed (must match the number used when training
+        # the model!) get the word embedding from our Word2Vec model.
+        features = np.zeros((1, max_tweet_tokens, word2vec_vector_size), dtype=K.floatx())
+
+        for i, token in enumerate(tokens):
+            # Stop if we got enough features.
+            if i >= max_tweet_tokens:
+                break;
+
+            # This feature is not in our w2v model. Try the next one.
+            if token not in self._w2v:
+                continue
+
+            features[0, i, :] = self._w2v[token]
+
+        return tokens, features
+
+    def _get_sentiment(self, features):
+        # Perform the prediction. We need to make sure the default graph
+        # is the one we loaded, because we might be in another thread.
+        pred = None
+        with self._model_graph.as_default():
+            # We trained the model in batches, but we want the prediciton for
+            # a single sample. Make sure to set the batch_size so Keras doesn't
+            # complain.
+            pred = self._model.predict(features, batch_size=1)
+
+        # Interpret the predicted result: if the index of the maximum value
+        # is 0, then this Tweet has a negative sentiment. If it's 1, then it's
+        # mostly positive.
+        sentiment = np.argmax(pred[0])
+        # Return the sentiment value and its "likelihood".
+        return (
+            "negative" if sentiment == 0 else "positive",
+            np.asscalar(pred[0][sentiment]),
+        )
 
     def _get_geo_coords(self, data):
         """ Extract a latitude and a longitude from a tweet.
@@ -94,7 +209,7 @@ class TweetToPacket:
             # Each UTC hour is a 15° slice of the world.
             longitude = utc_hours * 15.0
             # We can't deduce the latitude, so just assign one
-            latitude =  36.778259
+            latitude = 36.778259
             return (latitude, longitude)
 
         if user_data.get("time_zone"):

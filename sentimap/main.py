@@ -31,9 +31,11 @@ def parse_args():
 
     return parser.parse_args()
 
+
 def send_data(tweet):
     import json
     logger.debug("Clean record {}".format(json.dumps(tweet)))
+
 
 def execute_pipeline(args):
     # Set the desired log level.
