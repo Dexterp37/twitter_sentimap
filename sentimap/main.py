@@ -1,6 +1,8 @@
 import argparse
+import json
 import logging
 import sys
+from kafka_output import KafkaOutput
 from twitter_source import TwitterSource
 from tweet_to_packet import TweetToPacket
 from replay_source import ReplaySource
@@ -31,12 +33,10 @@ def parse_args():
                         default="info",
                         help="Set the default log level (e.g. INFO, WARNNG, ...)")
 
+    parser.add_argument("--kafkaserver", action="store", required=False, default=None,
+                        help="The address of the kafka server to send the data to")
+
     return parser.parse_args()
-
-
-def send_data(tweet):
-    import json
-    logger.debug("Clean record {}".format(json.dumps(tweet)))
 
 
 def execute_pipeline(args):
@@ -60,8 +60,13 @@ def execute_pipeline(args):
         recorder = SourceRecorder(args.datadir)
         source.set_data_available_callback(recorder.on_data_available)
 
+    # Define the function to send the output to Kafka.
+    kafka_writer = KafkaOutput("twitter_sentimap", args.kafkaserver) if args.kafkaserver else None
+
     # Clean the raw tweets.
-    cleaner = TweetToPacket(send_data)
+    cleaner = TweetToPacket(kafka_writer.process_input
+                            if kafka_writer
+                            else lambda t: logger.debug("Clean record {}".format(json.dumps(t))))
     source.set_data_available_callback(cleaner.process_input)
 
     # Run the pipeline and bail out when the user presses ENTER.

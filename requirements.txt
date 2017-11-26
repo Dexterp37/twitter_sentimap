@@ -3,6 +3,7 @@ flake8
 gensim
 geocoder
 nltk
+kafka-python
 keras
 tensorflow
 tweepy
