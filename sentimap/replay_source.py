@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 from threading import Thread
 from time import sleep
 
@@ -11,13 +12,15 @@ logger = logging.getLogger(__name__)
 class ReplaySource:
     """ Replay a previously recorded data stream.
     """
-    def __init__(self, data_dir, chunk_size, chunk_delay=0.05, data_callback=None):
+    def __init__(self, data_dir, chunk_size, chunk_delay=0.05,
+                 data_callback=None, add_fake_geo=False):
         self._data_dir = data_dir
         self._chunk_size = chunk_size
         self._callback = data_callback
         self._running = False
         self._thread = None
         self._chunk_delay = chunk_delay
+        self._add_fake_geo = add_fake_geo
 
     def start(self, languages, keywords):
         if not os.path.exists(self._data_dir):
@@ -36,6 +39,8 @@ class ReplaySource:
             return
 
         self._running = False
+        # Wait 5 seconds at most for the thread to terminate.
+        self._thread.join(5.0)
 
     def _load_chunk(self, file_path):
         logger.debug("Loading chunk {}".format(file_path))
@@ -49,6 +54,19 @@ class ReplaySource:
             data = json.load(data_file)
 
         return data
+
+    def _generate_fake_lat_long(self, origin_lat, origin_lon):
+        """ Generate a random pair of latitude and longitude.
+
+        This function is useful for debugging purposes. It avoids
+        querying the geocoding services that might rate limit us.
+        """
+        return {
+            "coordinates": [
+                origin_lat + random.random(),
+                origin_lon + random.random()
+            ]
+        }
 
     def _run(self):
         """ A loop running in another thread that replays the recorded data.
@@ -77,6 +95,9 @@ class ReplaySource:
             final_cursor_position = entry_cursor + self._chunk_size
             chunk = chunk_buffer[entry_cursor:final_cursor_position]
             entry_cursor = final_cursor_position
+
+            if self._add_fake_geo:
+                chunk[0]["geo"] = self._generate_fake_lat_long(42.378036, -71.118340)
 
             # Run the callback.
             self.on_data_available(chunk)

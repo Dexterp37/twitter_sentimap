@@ -43,7 +43,7 @@ class TweetToPacket:
         # Clean and extract the data.
         tokens, features = self._process_text(raw_tweet)
         cleaned = {
-            #"location": self._get_geo_coords(raw_tweet),
+            "location": self._get_geo_coords(raw_tweet),
             "text": raw_tweet.get("text"),
             "text_tokens": tokens,
             "sentiment": self._get_sentiment(features),
@@ -122,7 +122,7 @@ class TweetToPacket:
         for i, token in enumerate(tokens):
             # Stop if we got enough features.
             if i >= max_tweet_tokens:
-                break;
+                break
 
             # This feature is not in our w2v model. Try the next one.
             if token not in self._w2v:

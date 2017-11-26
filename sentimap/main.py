@@ -24,8 +24,10 @@ def parse_args():
     parser.add_argument("--datadir", action="store",
                         required=any(x in sys.argv for x in ["--record", "--replay"]),
                         help="The directory for the recorded/replayed data")
+    parser.add_argument("--fakegeo", action="store_true", default=False,
+                        help="Enable faking latitude and longitude")
 
-    parser.add_argument("--log-level", action="store", required=False,
+    parser.add_argument("--loglevel", action="store", required=False,
                         default="info",
                         help="Set the default log level (e.g. INFO, WARNNG, ...)")
 
@@ -39,7 +41,7 @@ def send_data(tweet):
 
 def execute_pipeline(args):
     # Set the desired log level.
-    logging.basicConfig(level=args.log_level.upper())
+    logging.basicConfig(level=args.loglevel.upper())
     logger.info("Starting")
 
     # Pick the right data source depending on the provided arguments.
@@ -47,7 +49,8 @@ def execute_pipeline(args):
     if args.replay:
         source = ReplaySource(args.datadir,
                               chunk_size=1,
-                              chunk_delay=2)
+                              chunk_delay=2,
+                              add_fake_geo=args.fakegeo)
     else:
         source = TwitterSource()
 
