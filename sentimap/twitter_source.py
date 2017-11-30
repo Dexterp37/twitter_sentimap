@@ -52,7 +52,7 @@ class TwitterSource:
             logger.error("The stream is already started.")
             return
 
-        self._stream = tweepy.Stream(self._auth, TwitterStreamListener(self))
+        self._stream = tweepy.Stream(self._auth, TwitterStreamListener(self), stall_warnings=True)
         self._stream.filter(track=keywords, languages=languages, async=True)
 
     def stop(self):
@@ -67,4 +67,6 @@ class TwitterSource:
 
     def on_data_available(self, json_data):
         if self._callback:
-            self._callback(json_data)
+            # Send a vector of 1 for compatibility with the replay source.
+            # We can configure it to send more than one tweet!
+            self._callback([json_data])

@@ -41,7 +41,12 @@ class TweetToPacket:
         raw_tweet = data[0]
 
         # Clean and extract the data.
-        tokens, features = self._process_text(raw_tweet)
+        processed = self._process_text(raw_tweet)
+        if not processed:
+            logger.error("Unable to process tweet text")
+            return
+
+        tokens, features = processed
         cleaned = {
             "location": self._get_geo_coords(raw_tweet),
             "text": raw_tweet.get("text"),
