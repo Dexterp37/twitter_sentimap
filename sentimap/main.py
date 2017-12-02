@@ -36,6 +36,10 @@ def parse_args():
     parser.add_argument("--kafkaserver", action="store", required=False, default=None,
                         help="The address of the kafka server to send the data to")
 
+    parser.add_argument("--keyword", action="store", required="--replay" not in sys.argv,
+                        default=None,
+                        help="The keyword to listen to on social media")
+
     return parser.parse_args()
 
 
@@ -70,7 +74,7 @@ def execute_pipeline(args):
     source.set_data_available_callback(cleaner.process_input)
 
     # Run the pipeline and bail out when the user presses ENTER.
-    source.start(['en'], ['trump'])
+    source.start(['en'], [args.keyword])
     input("--> Press enter to quit.\n")
     source.stop()
 
