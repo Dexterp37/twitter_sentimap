@@ -26,6 +26,8 @@ def create_map():
         ("Longitude", "@lon"),
         ("Sentiment", "@sentiment"),
         ("Accuracy", "@sentiment_accuracy"),
+        ("User", "@name"),
+        ("Text", "@text"),
     ])
     # TODO Embed tweet preview?
 
@@ -78,8 +80,8 @@ def create_map():
         }
     ]
 
-    map_options = GMapOptions(lat=33.0, lng=-33.0, map_type="roadmap",
-                              styles=json.dumps(google_map_style), zoom=3)
+    map_options = GMapOptions(lat=33.0, lng=-83.0, map_type="roadmap",
+                              styles=json.dumps(google_map_style), zoom=4)
     plot = GMapPlot(
         x_range=DataRange1d(), y_range=DataRange1d(), map_options=map_options,
         api_key = config.GOOGLE_MAPS_API_KEY
@@ -114,7 +116,9 @@ source = ColumnDataSource(
         lon=[],
         color=[],
         sentiment_accuracy=[],
-        sentiment=[]
+        sentiment=[],
+        text=[],
+        name=[],
     )
 )
 
@@ -148,6 +152,8 @@ def update(t):
         "color": [],
         "sentiment_accuracy": [],
         "sentiment": [],
+        "text": [],
+        "name": []
     }
 
     # Fill the |new_chunK| with oru data.
@@ -167,6 +173,8 @@ def update(t):
             new_chunk["sentiment"].append(sentiment[0])
             new_chunk["sentiment_accuracy"].append(sentiment[1])
             new_chunk["color"].append("red" if sentiment[0] == "negative" else "green")
+            new_chunk["text"].append(tweet_data.get("text", ""))
+            new_chunk["name"].append(tweet_data.get("screen_name", ""))
 
     source.stream(new_chunk, 1000)
 
