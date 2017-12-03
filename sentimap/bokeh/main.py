@@ -1,22 +1,23 @@
 import json
+import os
+import sys
 from bokeh.driving import count
 from bokeh.layouts import column
 from bokeh.models import (
-  GMapPlot, GMapOptions, ColumnDataSource, Circle,
-  DataRange1d, PanTool, WheelZoomTool, BoxSelectTool,
-  HoverTool
+    GMapPlot, GMapOptions, ColumnDataSource, Circle,
+    DataRange1d, PanTool, WheelZoomTool, BoxSelectTool,
+    HoverTool
 )
 from bokeh.plotting import curdoc
 
-from kafka import KafkaConsumer, TopicPartition
-from kafka.errors import KafkaError
+from kafka import KafkaConsumer
 from kafka.errors import OffsetOutOfRangeError
 
 # This is a nasty, ugly workaround to load the config from a single location:
 # the parent directory.
-import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import config
+import config  # noqa: E402
+
 
 def create_map():
     # Programmatically create a tooltip that pops up when hovering
@@ -90,6 +91,7 @@ def create_map():
     plot.add_tools(PanTool(), WheelZoomTool(), BoxSelectTool(), hover)
     return plot
 
+
 def create_kafka_input(server, topic):
     consumer = None
     try:
@@ -103,12 +105,15 @@ def create_kafka_input(server, topic):
     finally:
         return consumer
 
+
 map_plot = create_map()
 kafka_consumer = create_kafka_input("localhost:9092", "twitter_sentimap")
+
 
 def shutdown_hook():
     if kafka_consumer:
         kafka_consumer.close()
+
 
 source = ColumnDataSource(
     data=dict(
@@ -126,6 +131,7 @@ circle = Circle(x="lon", y="lat", size=15, fill_color="color",
                 fill_alpha="sentiment_accuracy", line_color="black", line_alpha=0.8,
                 line_dash="solid")
 map_plot.add_glyph(source, circle)
+
 
 @count()
 def update(t):
@@ -178,6 +184,8 @@ def update(t):
 
     source.stream(new_chunk, 1000)
 
+
+# Add the plot to the web page.
 curdoc().add_root(column(map_plot, sizing_mode="scale_width"))
 curdoc().add_periodic_callback(update, 1000)
 curdoc().title = "Twitter sentimap"
