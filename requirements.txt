@@ -1,4 +1,5 @@
 argparse
+bokeh
 flake8
 gensim
 geocoder
