@@ -5,7 +5,7 @@ from bokeh.driving import count
 from bokeh.layouts import column
 from bokeh.models import (
     GMapPlot, GMapOptions, ColumnDataSource, Circle,
-    DataRange1d, PanTool, WheelZoomTool, BoxSelectTool,
+    Range1d, PanTool, WheelZoomTool, BoxSelectTool,
     HoverTool
 )
 from bokeh.plotting import curdoc
@@ -22,15 +22,29 @@ import config  # noqa: E402
 def create_map():
     # Programmatically create a tooltip that pops up when hovering
     # a Tweet on the map.
-    hover = HoverTool(tooltips=[
-        ("Latitude", "@lat"),
-        ("Longitude", "@lon"),
-        ("Sentiment", "@sentiment"),
-        ("Accuracy", "@sentiment_accuracy"),
-        ("User", "@name"),
-        ("Text", "@text"),
-    ])
-    # TODO Embed tweet preview?
+    hover = HoverTool(tooltips="""
+        <div style="width: 300px">
+            <div>
+                <span style="font-size: 15px;">Location</span>
+                <span style="font-size: 10px; color: #696;">(@lat, @lon)</span>
+            </div>
+            <div>
+                <span style="font-size: 15px;">Sentiment</span>
+                <span style="font-size: 10px; color: #696;">(@sentiment)</span>
+            </div>
+            <div>
+                <span style="font-size: 15px;">Accuracy</span>
+                <span style="font-size: 10px; color: #696;">(@sentiment_accuracy)</span>
+            </div>
+            <div>
+                <span style="font-size: 15px;">@name:</span>
+            </div>
+            <div>
+                <span style="word-wrap: break-word;">@text{safe}</span>
+            </div>
+        </div>
+        """
+    )
 
     google_map_style = [
         {
@@ -84,7 +98,7 @@ def create_map():
     map_options = GMapOptions(lat=33.0, lng=-83.0, map_type="roadmap",
                               styles=json.dumps(google_map_style), zoom=4)
     plot = GMapPlot(
-        x_range=DataRange1d(), y_range=DataRange1d(), map_options=map_options,
+        x_range=Range1d(), y_range=Range1d(), map_options=map_options,
         api_key = config.GOOGLE_MAPS_API_KEY
     )
     plot.title.text = "Live Twitter Sentimap"
